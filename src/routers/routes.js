@@ -8,7 +8,14 @@ const {
   blastCancelHandler,
 } = require("../handlers/blast.handler");
 
-const buildRoutes = (client) => [
+/**
+ * Client WhatsApp bisa dibuat ulang saat boot gagal dan dicoba lagi.
+ * Karena itu setiap handler yang butuh client menerima fungsi
+ * `getClient()` dan dipanggil per-request, bukan sekali di boot.
+ * Kalau tidak, request setelah retry akan memakai client lama
+ * yang sudah hancur.
+ */
+const buildRoutes = (getClient) => [
   {
     method: `get`,
     path: `/`,
@@ -17,22 +24,22 @@ const buildRoutes = (client) => [
   {
     method: `get`,
     path: `/status`,
-    handler: statusHandler(client),
+    handler: (req, res) => statusHandler(getClient())(req, res),
   },
   {
     method: `post`,
     path: `/send`,
-    handler: sendTextHandler(client),
+    handler: (req, res) => sendTextHandler(getClient())(req, res),
   },
   {
     method: `post`,
     path: `/send-media`,
-    handler: sendMediaHandler(client),
+    handler: (req, res) => sendMediaHandler(getClient())(req, res),
   },
   {
     method: `post`,
     path: `/blast`,
-    handler: blastHandler(client),
+    handler: (req, res) => blastHandler(getClient())(req, res),
   },
   {
     method: `get`,
