@@ -183,12 +183,62 @@ buildRoutes(() => client).forEach(({ method, path: routePath, handler }) => {
   app[method.toLowerCase()](routePath, handler);
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   const enabled = (process.env.API_KEY || "")
     .split(",")
     .some((k) => k.trim());
   console.log(`App listening on http://localhost:${port}`);
   console.log(`API key auth: ${enabled ? "ON" : "OFF (set API_KEY di .env)"}`);
+});
+
+// Port 5000 kadang masih dipegang proses gateway sebelumnya, atau
+// proses lain (web server, project lain). Tanpa penanganan ini Node
+// hanya menampilkan EADDRINUSE lalu langsung mati tanpa penjelasan.
+server.on("error", async (err) => {
+  if (err.code !== "EADDRINUSE") {
+    console.error(`\nGagal menjalankan server: ${err.message}\n`);
+    process.exit(1);
+  }
+
+  console.error(`\nPort ${port} sedang dipakai proses lain.`);
+  console.error("Biasanya ini gateway yang belum ditutup dengan benar.\n");
+
+  if (process.platform === "win32") {
+    const { execSync } = require("child_process");
+    const pids = new Set();
+    // PATH bisa tidak memuat System32, jadi pakai path absolut.
+    const sysDir = `${process.env.SystemRoot || "C:\\Windows"}\\System32`;
+    try {
+      const out = execSync(`"${sysDir}\\netstat.exe" -ano | "${sysDir}\\findstr.exe" :${port}`, {
+        encoding: "utf8",
+        shell: "C:\\Windows\\System32\\cmd.exe",
+      });
+      out
+        .split("\n")
+        .filter((l) => l.includes("LISTENING"))
+        .forEach((l) => {
+          const parts = l.trim().split(/\s+/);
+          if (parts.length) pids.add(parts[parts.length - 1]);
+        });
+    } catch (_) {
+      /* netstat gagal, fallback di bawah */
+    }
+
+    if (pids.size) {
+      pids.forEach((pid) => console.error(`  PID ${pid} memegang port ${port}`));
+      console.error("\nTutup dengan:");
+      pids.forEach((pid) => console.error(`  taskkill /f /pid ${pid}`));
+    } else {
+      console.error("Buka Command Prompt baru, lalu:");
+      console.error("  taskkill /f /im node.exe");
+    }
+  } else {
+    console.error("Cek proses yang memegang port dengan:");
+    console.error(`  lsof -i :${port}`);
+  }
+
+  console.error("\nAtau ganti port di .env:  APP_PORT = 5001\n");
+  process.exit(1);
 });
 
 boot();

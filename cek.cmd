@@ -46,6 +46,9 @@ if errorlevel 1 (
     echo    ^- Gateway belum jalan. Jalankan: npm start
 ) else (
     echo    OK - ada proses dengar di port 5000
+    echo.
+    echo    Kalau mau restart, tutup dulu PID di bawah:
+    netstat -ano | findstr ":5000" | findstr "LISTENING"
 )
 
 REM --- Sesi WhatsApp ---
@@ -72,6 +75,7 @@ echo.
 echo    Gateway mati?          npm start
 echo    Perlu scan ulang?      npm run qr
 echo    Sesi rusak?            rmdir /s /q .wwebjs_auth ^&^& npm run qr
+echo    Port 5000 bentrok?     taskkill /f /im node.exe
 echo    Gagal semua?           install.cmd
 echo  ==========================================================
 echo.
