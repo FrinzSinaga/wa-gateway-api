@@ -27,10 +27,26 @@ install.cmd
 Skrip itu otomatis cek Node.js, membuat `.env`, mengacak API key, dan
 menjalankan `npm install`.
 
+### Linux (Ubuntu / Debian / Rocky / Alma / CentOS)
+
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+Skrip yang sama, versi bash.odyga 추가로 mengecek apakah Chromium sudah
+terpasang — itu yang paling sering jadi penghalang di server Linux.
+
+Kalau pakai `root`:
+
+```bash
+chmod +x install.sh && ./install.sh
+```
+
 ### Manual
 
 ```bash
-git clone https://github.com/nandasafiqalfiansyah/wa-gateway-api.git
+git clone https://github.com/FrinzSinaga/wa-gateway-api.git
 cd wa-gateway-api
 npm install
 ```
@@ -155,17 +171,58 @@ Shared hosting / cPanel **tidak bisa** menjalankan gateway (butuh Node.js
 2. **Railway / Render** — proses persistent, perlu install Chromium
 3. **PC sendiri** — harus nyala terus, cocok untuk testing
 
+### Pakai sebagai service di Linux
+
+Agar tetap hidup 24 jam dan auto-restart, buat systemd service:
+
+```ini
+# /etc/systemd/system/wa-gateway.service
+[Unit]
+Description=WA Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/wa-gateway-api
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Aktifkan:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now wa-gateway
+sudo systemctl status wa-gateway
+```
+
+Lihat log:
+
+```bash
+sudo journalctl -u wa-gateway -f
+```
+
 ## Troubleshooting
 
 | Gejala | Penyebab & solusi |
 | --- | --- |
-`node is not recognized` | Node.js belum terpasang — pasang versi LTS dari nodejs.org |
-`ProtocolError: Runtime.callFunctionOn timed out` | Sesi Chromium rusak — `rmdir /s /q .wwebjs_auth` lalu `npm run qr` |
+`node is not recognized` | Node.js belum terpasang — pasang versi 18+ dari nodejs.org |
+`ProtocolError: Runtime.callFunctionOn timed out` | Sesi Chromium rusak — hapus `.wwebjs_auth` lalu `npm run qr` |
 `The browser is already running` | Sudah ada proses gateway — tutup semua jendela CMD |
+`EADDRINUSE: address already in use` | Port dipakai proses lain — pesan error sudah menyebut PID-nya |
 `401 Unauthorized` | `API_KEY` tidak sama dengan yang ada di `.env` |
 `Failed to connect to port 5000` | Gateway belum jalan — jalankan `npm start` |
 `state: qr` | Belum scan QR — jalankan `npm run qr` |
 `state: disconnected` terus | Sesi expired / di-revoke — scan ulang QR |
+`Execution context was destroyed` | Halaman WhatsApp redirect saat start — sudah ada retry otomatis |
+
+Ada `cek.cmd` (Windows) dan `cek.sh` (Linux) untuk diagnosis cepat.
 
 ## Dependencies
 
