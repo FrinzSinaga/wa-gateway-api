@@ -114,7 +114,10 @@ function buatClient() {
       ],
     },
 
-    ffmpeg: "./ffmpeg.exe",
+    // ffmpeg hanya dipakai untuk mengirim video/audio. Di Windows path-nya
+    // relatif ke file exe, di Linux nama executable-nya saja. Kalau ffmpeg
+    // tidak ada, whatsapp-web.js akan tetap jalan untuk teks/gambar/PDF.
+    ffmpeg: process.platform === "win32" ? "./ffmpeg.exe" : "/usr/bin/ffmpeg",
 
     authStrategy: new LocalAuth({
       clientId: "client",

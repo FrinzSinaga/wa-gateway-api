@@ -68,7 +68,14 @@ function buatClient() {
     console.log("    WhatsApp > Perangkat Tertaut > Tautkan Perangkat");
     console.log("");
 
-    exec(`start "" "${OUT}"`, { shell: "cmd.exe" }, () => {});
+    // Buka otomatis di penampil gambar bawaan Windows.
+    // Di Linux tidak ada perintah `start`, jadi dilewati saja - QR tetap
+    // ditulis ke file dan bisa dibuka manual.
+    if (process.platform === "win32") {
+      exec(`start "" "${OUT}"`, { shell: "cmd.exe" }, () => {});
+    } else {
+      console.log("  (buka file itu manual dari file manager)");
+    }
   });
 
   c.on("authenticated", () => {
