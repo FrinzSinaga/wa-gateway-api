@@ -4,11 +4,13 @@ const dotenv = require("dotenv");
 const config = require("../config/config.json");
 const bodyParser = require("body-parser");
 const { Client, LocalAuth } = require("whatsapp-web.js");
-const routers = require("./routers/routes");
+const buildRoutes = require("./routers/routes");
 const qrcode = require("qrcode-terminal");
 const fs = require("fs");
 const colors = require("colors");
 const handleMessages = require("./handlers/main.handler");
+const { dispatchWebhook, buildMessagePayload } = require("./handlers/webhook.helper");
+const apiKey = require("./middleware/apiKey");
 const moment = require("moment-timezone");
 
 dotenv.config();
@@ -16,16 +18,29 @@ const app = express();
 const port = process.env.APP_PORT;
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: "25mb" }));
+
+app.use(apiKey);
 
 const client = new Client({
   restartOnAuthFail: true,
+
   puppeteer: {
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    protocolTimeout: 120000,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu"
+    ],
   },
+
   ffmpeg: "./ffmpeg.exe",
-  authStrategy: new LocalAuth({ clientId: "client" }),
+
+  authStrategy: new LocalAuth({
+    clientId: "client"
+  }),
 });
 
 client.initialize();
@@ -62,12 +77,38 @@ client.on("ready", () => {
     }
   });
 });
-client.on("message", handleMessages(client, config));
+client.on("message", async (message) => {
+  try {
+    await handleMessages(client, config)(message);
+  } catch (err) {
+    console.error("[handler]", err.message);
+  }
 
-routers.forEach(({ method, path, handler }) => {
+  if (process.env.WEBHOOK_URL) {
+    dispatchWebhook(process.env.WEBHOOK_URL, buildMessagePayload(message, config));
+  }
+});
+
+client.on("message_ack", (message, ack) => {
+  if (!process.env.WEBHOOK_URL) return;
+
+  dispatchWebhook(process.env.WEBHOOK_URL, {
+    event: "message.ack",
+    id: message.id ? message.id._serialized : null,
+    to: message.to || null,
+    ack,
+    timestamp: message.timestamp,
+  });
+});
+
+buildRoutes(client).forEach(({ method, path, handler }) => {
   app[method.toLowerCase()](path, handler);
 });
 
 app.listen(port, () => {
+  const enabled = (process.env.API_KEY || "")
+    .split(",")
+    .some((k) => k.trim());
   console.log(`App listening on http://localhost:${port}`);
+  console.log(`API key auth: ${enabled ? "ON" : "OFF (set API_KEY di .env)"}`);
 });

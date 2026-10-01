@@ -1,3 +1,17 @@
 node_modules/
 .wwebjs_cache/
 .wwebjs_auth/
+.wwebjs_auth.backup-*/
+.env
+.antiban-state.json
+.antiban-state.backup.json
+wa-qr.png
+npm-debug.log*
+
+# Binary besar - unduh sendiri, jangan di-commit (GitHub limit 100 MB)
+ffmpeg.exe
+ffprobe.exe
+
+# Log & dump
+*.log
+dump.sql
