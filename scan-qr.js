@@ -15,6 +15,7 @@ const qrcode = require("qrcode");
 const path = require("path");
 const fs = require("fs");
 const { exec } = require("child_process");
+const { opsiPuppeteer, petunjukPerbaikan } = require("./src/helpers/browser.helper");
 require("dotenv").config();
 
 const OUT = path.join(__dirname, "wa-qr.png");
@@ -37,18 +38,10 @@ function bersihkanSesi() {
 function buatClient() {
   const c = new Client({
     authStrategy: new LocalAuth({ clientId }),
-    puppeteer: {
-      headless: true,
-      // Chromium versi baru butuh waktu lebih lama; default 30 detik
-      // kadang habis sebelum WhatsApp Web selesai load.
-      protocolTimeout: 180000,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-      ],
-    },
+    // Helper yang sama dengan server.js, supaya QR scanner memakai
+    // Chromium dan timeout yang sama di Windows maupun Linux.
+    puppeteer: opsiPuppeteer(),
+    ffmpeg: process.platform === "win32" ? "./ffmpeg.exe" : "/usr/bin/ffmpeg",
   });
 
   c.on("qr", async (qr) => {
@@ -153,10 +146,7 @@ async function initializeDenganRetry(percobaan) {
     console.error("  " + pesan);
     console.error("");
     console.error("  Coba langkah berikut:");
-    console.error("    1. Tutup semua jendela Command Prompt");
-    console.error("    2. taskkill /f /im chrome.exe");
-    console.error("    3. rmdir /s /q .wwebjs_auth");
-    console.error("    4. npm run qr");
+    petunjukPerbaikan().forEach((baris) => console.error("    " + baris));
     console.error("");
     process.exit(1);
   }

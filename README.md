@@ -16,7 +16,7 @@ Penyimpanan | ± 500 MB |
 
 ## Instalasi
 
-###-windows
+### Windows
 
 Ekstrak ke path pendek tanpa spasi, lalu:
 
@@ -34,14 +34,31 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Skrip yang sama, versi bash.odyga 추가로 mengecek apakah Chromium sudah
-terpasang — itu yang paling sering jadi penghalang di server Linux.
+Skrip yang sama, versi bash, dengan tambahan: memasang Chromium beserta
+library runtime-nya kalau belum ada, menjalankan smoke test headless, dan
+mencatat path Chromium ke `CHROME_BIN` di `.env`. Library runtime yang kurang
+adalah penyebab paling umum gateway gagal start di server Linux.
 
 Kalau pakai `root`:
 
 ```bash
 chmod +x install.sh && ./install.sh
 ```
+
+Chromium juga bisa dipasang manual lebih dulu:
+
+```bash
+# Rocky / Alma / CentOS
+sudo dnf install -y chromium nss atk at-spi2-atk cups-libs libdrm \
+  libxkbcommon libXcomposite libXdamage libXrandr mesa-libgbm pango \
+  alsa-lib google-noto-sans-fonts
+
+# Ubuntu / Debian
+sudo apt install -y chromium-browser
+```
+
+> CentOS 7 sudah habis masa dukungannya dan paket Chromiumnya jarang
+> diperbarui. Kalau bisa, pakai Rocky Linux 9 atau Alma Linux 9.
 
 ### Manual
 
@@ -63,6 +80,30 @@ Buat API key acak:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Opsi browser di `.env` biasanya tidak perlu diisi karena gateway sudah
+mencari Chromium sendiri. Yang perlu diubah hanya kalau ada masalah:
+
+```env
+# Dipakai kalau Chromium tidak ada di lokasi standar
+CHROME_BIN = /usr/bin/chromium
+
+# Batas tunggu browser connect. Naikkan di server yang lambat.
+# Error "Timed out after 30000 ms while trying to connect to the browser"
+# muncul kalau nilai ini masih terlalu kecil.
+PUPPETEER_TIMEOUT = 120000
+
+# Tampilkan log detail Chromium saat launch gagal
+PUPPETEER_DUMPIO = false
+```
+
+Saat start, gateway mencetak browser yang dipakai supaya mudah dicek:
+
+```
+Browser        : /usr/bin/chromium
+Platform       : linux x64 | launch timeout 120000ms
+API key auth: ON
 ```
 
 ### Menjalankan
@@ -221,6 +262,39 @@ sudo journalctl -u wa-gateway -f
 `state: qr` | Belum scan QR — jalankan `npm run qr` |
 `state: disconnected` terus | Sesi expired / di-revoke — scan ulang QR |
 `Execution context was destroyed` | Halaman WhatsApp redirect saat start — sudah ada retry otomatis |
+`Timed out after 30000 ms while trying to connect to the browser` | Chromium gagal start di server — naikkan `PUPPETEER_TIMEOUT`, pasang library runtime, atau lihat log dengan `PUPPETEER_DUMPIO=true npm start` |
+`API key auth: OFF` | `API_KEY` kosong di `.env` — gateway terbuka tanpa autentikasi |
+`Failed to connect to browser` / `browser has disconnected` | Chromium/Firefox belum terpasang di Linux — jalankan `./install.sh` |
+
+### Timeout Chromium di server Linux
+
+Kalau muncul `Timed out while trying to connect to the browser`, urutannya:
+
+```bash
+# 1. Lihat gateway Diagnosis dulu
+./cek.sh
+
+# 2. Cek library yang hilang
+ldd "$(command -v chromium)" | grep "not found"
+
+# 3. Tes Chromium tanpa gateway
+chromium --headless --no-sandbox --disable-gpu --dump-dom about:blank
+
+# 4. Pasang yang kurang
+sudo dnf install -y nss atk at-spi2-atk cups-libs libdrm libxkbcommon \
+  libXcomposite libXdamage libXrandr mesa-libgbm pango alsa-lib \
+  google-noto-sans-fonts
+
+# 5. Kalau semuanya sudah benar tapi masih lambat, naikkan timeout
+#    lalu jalankan ulang
+PUPPETEER_TIMEOUT=180000 npm start
+```
+
+Kalau masih gagal, tampilkan log Chromium untuk melihat pesan aslinya:
+
+```bash
+PUPPETEER_DUMPIO=true npm start 2>&1 | tee log-chromium.txt
+```
 
 Ada `cek.cmd` (Windows) dan `cek.sh` (Linux) untuk diagnosis cepat.
 

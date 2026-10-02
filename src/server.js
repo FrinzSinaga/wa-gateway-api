@@ -16,6 +16,11 @@ const {
 } = require("./handlers/webhook.helper");
 const apiKey = require("./middleware/apiKey");
 const moment = require("moment-timezone");
+const {
+  opsiPuppeteer,
+  ringkasBrowser,
+  petunjukPerbaikan,
+} = require("./helpers/browser.helper");
 
 dotenv.config();
 const app = express();
@@ -102,17 +107,10 @@ function buatClient() {
   const c = new Client({
     restartOnAuthFail: true,
 
-    puppeteer: {
-      headless: true,
-      // Chromium versi baru butuh waktu lama untuk memuat WhatsApp Web.
-      protocolTimeout: 180000,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-      ],
-    },
+    // Opsi ini disusun di browser.helper.js: mencari Chromium yang terpasang
+    // di Windows maupun Linux, dan menaikkan batas waktu launch yang
+    // defaultnya cuma 30 detik (penyebab utama gagal di VPS).
+    puppeteer: opsiPuppeteer(),
 
     // ffmpeg hanya dipakai untuk mengirim video/audio. Di Windows path-nya
     // relatif ke file exe, di Linux nama executable-nya saja. Kalau ffmpeg
@@ -174,9 +172,7 @@ async function boot(percobaan = 1) {
     console.error(`GAGAL memulai WhatsApp: ${pesan}`);
     console.error("");
     console.error("Coba langkah ini, lalu jalankan ulang `npm start`:");
-    console.error("  1. taskkill /f /im chrome.exe");
-    console.error("  2. rmdir /s /q .wwebjs_auth");
-    console.error("  3. npm run qr");
+    petunjukPerbaikan().forEach((baris) => console.error(baris));
     console.error("");
     process.exit(1);
   }
@@ -190,8 +186,22 @@ const server = app.listen(port, () => {
   const enabled = (process.env.API_KEY || "")
     .split(",")
     .some((k) => k.trim());
+  const info = ringkasBrowser();
+
   console.log(`App listening on http://localhost:${port}`);
+  console.log(`Browser        : ${info.executablePath}`);
+  console.log(`Platform       : ${info.platform} | launch timeout ${info.timeout}ms`);
   console.log(`API key auth: ${enabled ? "ON" : "OFF (set API_KEY di .env)"}`);
+
+  // Gateway yang dibiarkan tanpa API_KEY menerima request dari siapa saja
+  // yang bisa mencapai portnya, jadi nagih sekali di sini.
+  if (!enabled) {
+    console.error("");
+    console.error("PERINGATAN: API_KEY belum diisi.");
+    console.error("Gateway terbuka tanpa autentikasi. Jangan expose port ini ke internet,");
+    console.error("atau isi API_KEY di .env sebelum lanjut.");
+    console.error("");
+  }
 });
 
 // Port 5000 kadang masih dipegang proses gateway sebelumnya, atau
@@ -236,8 +246,42 @@ server.on("error", async (err) => {
       console.error("  taskkill /f /im node.exe");
     }
   } else {
-    console.error("Cek proses yang memegang port dengan:");
-    console.error(`  lsof -i :${port}`);
+    // Di Linux tidak ada netstat Windows, jadi pakai tools native.
+    const { execSync } = require("child_process");
+
+    const cariPid = (perintah) => {
+      try {
+        return execSync(perintah, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      } catch (_) {
+        return "";
+      }
+    };
+
+    const ssOut = cariPid(`ss -tlnp 2>/dev/null | grep ":${port}"`);
+    const pids = new Set();
+
+    if (ssOut) {
+      ssOut
+        .split("\n")
+        .filter(Boolean)
+        .forEach((baris) => {
+          const cocok = baris.match(/pid=(\d+)/);
+          if (cocok) pids.add(cocok[1]);
+        });
+    } else {
+      const lsofOut = cariPid(`lsof -ti :${port} 2>/dev/null`);
+      lsofOut.split("\n").filter(Boolean).forEach((pid) => pids.add(pid.trim()));
+    }
+
+    if (pids.size) {
+      pids.forEach((pid) => console.error(`  PID ${pid} memegang port ${port}`));
+      console.error("\nTutup dengan:");
+      pids.forEach((pid) => console.error(`  kill ${pid}`));
+    } else {
+      console.error("Cek manual, lalu tutup prosesnya:");
+      console.error(`  lsof -i :${port}`);
+      console.error(`  sudo fuser -k ${port}/tcp`);
+    }
   }
 
   console.error("\nAtau ganti port di .env:  APP_PORT = 5001\n");
