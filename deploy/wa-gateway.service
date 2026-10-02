@@ -1,0 +1,36 @@
+[Unit]
+Description=WA Gateway API (WhatsApp Web Gateway)
+Documentation=https://github.com/FrinzSinaga/wa-gateway-api
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/wa-gateway-api-main
+
+# Path absolut dari `which node` - jangan andalkan PATH di systemd.
+ExecStart=/usr/bin/node src/server.js
+
+# Restart otomatis kalau crash, dengan jeda 10 detik.
+Restart=always
+RestartSec=10
+
+# Kalau gagal 5 kali dalam 5 menit, stop biar tidak restart loop.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Timeout graceful: WhatsApp Web butuh waktu menutup browser dengan benar.
+# Timeout yang terlalu pendek bisa merusak folder .wwebjs_auth.
+KillSignal=SIGINT
+TimeoutStopSec=60
+
+StandardOutput=append:/var/log/wa-gateway.log
+StandardError=append:/var/log/wa-gateway.log
+
+# Batas resource supaya gateway tidak membuat server kehabisan memori.
+MemoryMax=2G
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target
